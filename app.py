@@ -9,6 +9,14 @@ import os
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Cho phép mọi web sử dụng API
 
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    return response
+
+
 # ✅ Load model và scaler
 model_gen = tf.keras.models.load_model("model_generator.keras")
 model_fore = tf.keras.models.load_model("model_forecaster.keras")
