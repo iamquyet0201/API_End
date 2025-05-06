@@ -5,30 +5,18 @@ import tensorflow as tf
 import joblib
 import os
 
-# ✅ Kiểm tra đầy đủ file model trước khi chạy
-required_files = [
-    "model_generator.keras",
-    "model_forecaster.keras",
-    "scaler_generator.save",
-    "scaler_forecaster.save",
-    "scaler_fs_output.save"
-]
-missing = [f for f in required_files if not os.path.exists(f)]
-if missing:
-    raise FileNotFoundError(f"❌ Thiếu file: {missing}")
+# ✅ Tạo Flask app & bật CORS
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Cho phép mọi web sử dụng API
 
-# ✅ Tải model và scaler
+# ✅ Load model và scaler
 model_gen = tf.keras.models.load_model("model_generator.keras")
 model_fore = tf.keras.models.load_model("model_forecaster.keras")
 scaler_gen = joblib.load("scaler_generator.save")
 scaler_fore = joblib.load("scaler_forecaster.save")
 scaler_fs = joblib.load("scaler_fs_output.save")
 
-# ✅ Khởi tạo Flask app và bật CORS toàn cục
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # ✅ Cho phép mọi web gọi API  # Cho phép tất cả nguồn gọi API
-
-# ✅ Hàm phân loại FS
+# ✅ Hàm phân loại cảnh báo
 def classify_fs(fs):
     if fs >= 1.5:
         return "An toàn"
@@ -37,48 +25,40 @@ def classify_fs(fs):
     else:
         return "Nguy cơ cao"
 
-# ✅ Route kiểm tra API đang chạy
+# ✅ Trang gốc để kiểm tra API hoạt động
 @app.route('/')
 def home():
     return (
         "<h2>✅ Landslide FS Prediction API is running!</h2>"
-        "<p>Use <b>POST</b> at <code>/predict</code> with JSON:<br>"
-        "<code>{ \"features\": [c, L, gamma, h, u, phi, beta, elevation, slope_type] }</code></p>"
-        "<p>Or try <b>GET</b>:<br>"
-        "<code>/predict?c=...&L=...&gamma=...&h=...&u=...&phi=...&beta=...&elevation=...&slope_type=...</code></p>"
+        "<p>POST JSON to <code>/predict</code> or test via GET:</p>"
+        "<code>?c=..., L=..., gamma=..., h=..., u=..., phi=..., beta=..., elevation=..., slope_type=...</code>"
     )
 
-# ✅ Route dự đoán chính
+# ✅ API POST & GET
 @app.route('/predict', methods=['POST', 'GET'])
 def predict():
     try:
-        # Xử lý POST
         if request.method == 'POST':
             data = request.get_json(force=True)
             if not data or "features" not in data:
                 return jsonify({"success": False, "error": "Thiếu trường 'features'"}), 400
             features = np.array([data["features"]])
 
-        # Xử lý GET
         elif request.method == 'GET':
             keys = ["c", "L", "gamma", "h", "u", "phi", "beta", "elevation", "slope_type"]
-            try:
-                features = [float(request.args.get(k, "0")) for k in keys]
-            except:
-                return jsonify({"success": False, "error": "Tham số GET không hợp lệ"}), 400
+            features = [float(request.args.get(k, "0")) for k in keys]
             features = np.array([features])
         else:
             return jsonify({"success": False, "message": "Chỉ hỗ trợ GET và POST"}), 405
 
-        # ✅ Kiểm tra số lượng đặc trưng
         if features.shape[1] != 9:
-            return jsonify({"success": False, "error": "Bạn cần nhập đúng 9 đặc trưng đầu vào."}), 400
+            return jsonify({"success": False, "error": "Bạn cần nhập đủ 9 đặc trưng."}), 400
 
-        # ✅ Chuỗi xử lý dự đoán
-        input_scaled = scaler_gen.transform(features)
-        generated_seq = model_gen.predict(input_scaled)
-        sequence_lstm = generated_seq.reshape((1, 1, generated_seq.shape[1]))
-        fs_scaled = model_fore.predict(sequence_lstm)
+        # ✅ Dự đoán
+        sample_scaled = scaler_gen.transform(features)
+        generated_seq = model_gen.predict(sample_scaled)
+        seq_input = generated_seq.reshape((1, 1, generated_seq.shape[1]))
+        fs_scaled = model_fore.predict(seq_input)
         fs = scaler_fs.inverse_transform(fs_scaled)[0]
 
         # ✅ Trả kết quả
@@ -93,12 +73,8 @@ def predict():
         return jsonify({"success": True, "result": result})
 
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "message": "❌ Dữ liệu đầu vào sai định dạng. Hãy gửi {\"features\": [9 số]} hoặc query đầy đủ."
-        }), 400
+        return jsonify({"success": False, "error": str(e)}), 400
 
-# ✅ Không cần khi chạy trên Render (sử dụng Gunicorn)
-if __name__ == '__main__':
+# ✅ Render sẽ sử dụng Gunicorn, không cần run trực tiếp
+if __name__ == "__main__":
     app.run(debug=True)
