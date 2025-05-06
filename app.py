@@ -26,7 +26,7 @@ scaler_fs = joblib.load("scaler_fs_output.save")
 
 # ✅ Khởi tạo Flask app và bật CORS toàn cục
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Cho phép tất cả nguồn gọi API
+CORS(app, resources={r"/*": {"origins": "*"}})  # ✅ Cho phép mọi web gọi API  # Cho phép tất cả nguồn gọi API
 
 # ✅ Hàm phân loại FS
 def classify_fs(fs):
